@@ -1,0 +1,7 @@
+postgresql:
+  version: 10
+  username: odoo
+#pass plaintext is JH84SxQIKvTvzv05M9FRClcPq2F
+#Skg4NFN4UUlLdlR2enYwNU05RlJDbGNQcTJG is pass base64
+  password: Skg4NFN4UUlLdlR2enYwNU05RlJDbGNQcTJG
+  hostpatch: /home/postgresdb

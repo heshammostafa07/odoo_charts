@@ -1,0 +1,21 @@
+{{ $domain_prefix := split "-odoo" .Release.Name }}
+{{ $realname := $domain_prefix._0 }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-{{ $realname }}
+  labels:
+    app: odoo
+    name: {{ template "odoo.name" . }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8069
+  - name: livechat
+    port: 8072
+    targetPort: 8072
+  selector:
+    app: odoo
+    name: {{ template "odoo.name" . }}

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-{{ template "postgres.fullname" . }}
+data:
+  initpass.postgres.sh: |
+    #!/bin/sh
+    if [ ! -f /home/postgresmetadata/.env ]
+    then
+    mkdir -p /home/postgresmetadata
+    cat > /home/postgresmetadata/.env <<EOF
+    export POSTGRES_USER=${POSTGRES_USER}
+    export POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    export PGPASSWORD=${POSTGRES_PASSWORD}
+    EOF
+    fi
+  delete.database.odoo.run.sh: |
+    #!/bin/bash
+    read -p "Input database name that you want to delete:"  DATABASE_NAME_WANT_TO_DELETE
+    read -p "Are You Sure Delete DB ${list_backup[${num_backup}]} (Y/y):"  yesnoquestion
+    if [ "${yesnoquestion}" == "y" ] || [ "${yesnoquestion}" == "Y" ]; then
+    #delete user and database
+    psql --host=${DATABASE_ODOO_HOST} --username=${POSTGRES_USER} <<EOF
+    DROP DATABASE "${DATABASE_NAME_WANT_TO_DELETE}";
+    DROP USER IF EXISTS "${DATABASE_NAME_WANT_TO_DELETE}";
+    EOF
+    fi

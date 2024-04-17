@@ -1,0 +1,26 @@
+letsencrypt:
+  enable: false
+domain:
+  name: odook8s.com---xip.io.wildcard #or odook8s.com---xip.io for using letencrypt normal
+odoo:
+  version: 12-default #11-default
+  database:
+    host: service-postgres.postgres.svc.cluster.local
+  image_name: odoo
+  outside:
+    enable: false #from outside
+  addons:
+    enable: false
+    link: https://gitlab.com/USER/GitRepoFolder.git #Example: https://gitlab.com/USER/GitRepoFolder.git
+    gitusername: abcxyz #Git User or Token Name
+    gitpassword: 123123 #Git Password or Token
+#saltpassword for create new user and pass odoo
+  saltpass: MtYqZsQ83Fvskb137XCbaL #salt for password odoo
+volumes:
+  hostpath: /home/odoo-data
+  defaultaddons: /home/default-addons
+  dbpatchmetadata: /home/postgresdb/metadata
+limit:
+  enable: false
+  memory: 512
+  cpu: 1

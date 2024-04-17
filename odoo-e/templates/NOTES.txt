@@ -1,0 +1,12 @@
+{{ $domain_prefix := split "-odoo" .Release.Name }}
+{{ $realname := $domain_prefix._0 }}
+A Helm chart for Odoo develop by @W360S TEAM, @SAASTOOLS @FXPHUCVINHFX on Kubernetes to simply for end-user easy to use.
+
+Volume place in {{ .Values.volumes.hostpath }}/{{ $realname }}
+
+Name Database: {{ $realname }}
+
+Default Password Database: {{ $realname }}.{{ .Values.odoo.saltpass }}
+
+Default Password Admin Restore: {{ $realname }}.{{ .Values.odoo.saltpass }}
+File Admin Password: /home/odoo-data/{{ $realname }}/etc-odoo/odoo.conf & /home/odoo-data/{{ $realname }}/etc-odoo/.admin-odoo-password

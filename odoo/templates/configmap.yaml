@@ -1,0 +1,426 @@
+{{ $odoo_type := split "-" .Values.odoo.version }}
+{{ $odoo_version := $odoo_type._0 }}
+{{ $odoo_template := $odoo_type._1 }}
+{{ $git_addons_link := split "//" .Values.odoo.addons.link  }}
+{{ $domain_prefix := split "-odoo" .Release.Name }}
+{{ $realname := $domain_prefix._0 }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-{{ $realname }}
+data:
+#step 1 create config and grant again permission
+  init.extra.addons.odoo.conf.sh: |
+    #!/bin/sh
+    echo 'Clone Enterprise Modules'
+    #git clone --depth 1 -b 13.0 https://heshammostafa07:21f793db773b9dd6eea1f46f67a8702186d73a6e@github.com/odoo/enterprise /var/lib/extra-addons    
+    {{ if .Values.odoo.addons.enable }}
+    sleep 3s;
+    URL_GIT_ADDONS=""
+    if [ "{{ .Values.odoo.addons.gitusername }}" == "" ]
+    then
+      URL_GIT_ADDONS={{ .Values.odoo.addons.link }}
+    else
+      URL_GIT_ADDONS={{ $git_addons_link._0 }}//{{ .Values.odoo.addons.gitusername }}:{{ .Values.odoo.addons.gitpassword }}@{{ $git_addons_link._1 }}
+    fi
+    if [ -z "$(ls -A /var/lib/extra-addons/)" ]; then
+      git clone ${URL_GIT_ADDONS} /var/lib/extra-addons/
+    else
+      cd /var/lib/extra-addons/ && git pull
+    fi
+    {{ end }}
+  initdb.odoo.conf.sh: |
+    #!/bin/bash
+    . {{ .Values.volumes.dbpatchmetadata }}/.env
+    sleep 3s; #sleep for provisoning network up
+
+    echo '[SERVICE_INIT] Starting Init'
+    DATABASE_ODOO_NAME="{{ $realname }}"
+    DATABASE_ODOO_HOST="{{ .Values.odoo.database.host }}"
+    DATABASE_ODOO_USER="{{ $realname }}"
+    DATABASE_ODOO_PASS="{{ $realname }}.{{ .Values.odoo.saltpass }}"
+    ODOO_VERSION="{{ $odoo_version }}"
+
+    SERVICE_ODOO_NAME_IN_RANCHER=$(echo "${DATABASE_ODOO_NAME}" | tr '[:upper:]' '[:lower:]')
+    if [ "${SERVICE_ODOO_NAME_IN_RANCHER}" == "odoo" ]; then
+      echo 'Name odoo is not valid!'
+      exit 1
+    fi
+    
+    #change permission /var/lib/odoo
+    #if [ ! -d /var/lib/odoo/addons ]
+    if [ -z "$(ls -A /var/lib/odoo)" ]; then
+      mkdir -p /var/lib/odoo/addons
+      echo '[SERVICE_INIT] Change Permission!'
+      chown -R odoo:odoo /var/lib/odoo
+    fi
+
+    if [ -z "$(ls -A /var/lib/odoobackup)" ]; then
+      echo "Empty odoobackup, Change Permission!"
+      chown -R odoo:odoo /var/lib/odoobackup
+    fi
+
+    #if [ -z "$(ls -A /var/lib/extra-addons)" ]; then
+      echo "extra-addons, Change Permission!"
+      chown -R odoo:odoo /var/lib/extra-addons
+    #fi
+
+    # {{- if .Values.odoo.outside.enable }}
+    # echo "No install default addons"
+    # {{- else }}
+    if [ -z "$(ls -A /var/lib/default-addons/)" ]; then
+    
+      echo "default-addons, Change Permission!"
+      cp -r /var/lib/external-default-addons/{{ .Values.odoo.version }}/* /var/lib/default-addons/
+      chown -R odoo:odoo /var/lib/default-addons
+    fi
+    # {{- end }}
+
+    #if exists file /etc/odoo/odoo-backup.conf you need change to original name file
+    if [ -f /etc/odoo/odoo-backup.conf ]
+    then
+      mv /etc/odoo/odoo-backup.conf /etc/odoo/odoo.conf
+    fi
+
+    if [ ! -f /etc/odoo/.admin-odoo-password ]
+    then
+    #then
+    cat > /etc/odoo/.admin-odoo-password <<EOF
+    export ADMIN_ODOO_PASSWORD="${DATABASE_ODOO_PASS}"
+    EOF
+    #fi
+    fi
+
+    #create /etc/odoo/odoo.conf if it's not exists
+    if [ ! -f /etc/odoo/odoo.conf ]
+    then
+    echo "[SERVICE_INIT] Create Config File!"
+    cat > /etc/odoo/odoo.conf <<EOF
+    [options]
+    admin_passwd = ${DATABASE_ODOO_PASS}
+    db_host = ${DATABASE_ODOO_HOST}
+    db_user = ${DATABASE_ODOO_USER}
+    db_password = ${DATABASE_ODOO_PASS}
+    #db_user = ${POSTGRES_USER}
+    #db_password = ${POSTGRES_PASSWORD}
+    data_dir = /var/lib/odoo/
+    addons_path = /var/lib/extra-addons,/var/lib/default-addons
+    db_name = ${DATABASE_ODOO_NAME}
+    list_db = True
+    workers = 2
+    proxy_mode = True
+    #dbfilter = ^{{ $realname }}$
+    csv_internal_sep = ,
+    db_maxconn = 64
+    db_template = template0
+    email_from = False
+    #geoip_database = /usr/share/GeoIP/GeoLite2-City.mmdb
+    http_enable = True
+    http_interface = 
+    http_port = 8069
+    import_partial = 
+    limit_memory_hard = 2684354560
+    limit_memory_soft = 2147483648
+    limit_request = 8192
+    limit_time_cpu = 600
+    limit_time_real = 1200
+    limit_time_real_cron = -1
+    log_db = False
+    log_db_level = warning
+    log_handler = :INFO
+    log_level = info
+    #logfile = /var/log/odoo/odoo-server.log
+    logrotate = False
+    longpolling_port = 8072
+    max_cron_threads = 2
+    osv_memory_age_limit = 1.0
+    osv_memory_count_limit = False
+    pg_path = None
+    pidfile = None
+    reportgz = False
+    server_wide_modules = base,web
+    smtp_password = False
+    smtp_port = 25
+    smtp_server = localhost
+    smtp_ssl = False
+    smtp_user = False
+    syslog = False
+    test_enable = False
+    test_file = False
+    test_tags = None
+    translate_modules = ['all']
+    unaccent = False
+    without_demo = False
+    EOF
+    fi
+    
+
+    echo "[SERVICE_INIT] Change Permission /etc/odoo"
+    chown -R odoo:odoo /etc/odoo
+    
+    
+    
+    if [ $(psql --host=${DATABASE_ODOO_HOST} --username=${POSTGRES_USER} -lqt | cut -d \| -f 1 | grep -wc {{ $realname }}) -eq 0 ]
+    then
+    #create user and db database
+    echo "[SERVICE_INIT] Create Database and User Postgres!"
+    psql --host=${DATABASE_ODOO_HOST} --username=${POSTGRES_USER} <<EOF
+    CREATE DATABASE "${DATABASE_ODOO_NAME}" TEMPLATE template0;
+    CREATE USER "${DATABASE_ODOO_USER}" WITH ENCRYPTED PASSWORD '${DATABASE_ODOO_PASS}';
+    ALTER USER "${DATABASE_ODOO_USER}" CREATEDB;
+    ALTER USER "${DATABASE_ODOO_USER}" SUPERUSER;
+    GRANT ALL PRIVILEGES ON DATABASE "${DATABASE_ODOO_NAME}" TO "${DATABASE_ODOO_USER}";
+    EOF
+    else
+    psql --host=${DATABASE_ODOO_HOST} --username=${POSTGRES_USER} <<EOF
+    /* #ALTER USER "${DATABASE_ODOO_USER}" WITH NOCREATEDB; #remove from 2.0.1 */
+    /* #ALTER USER "${DATABASE_ODOO_USER}" WITH NOSUPERUSER; #remove from 2.0.1 */
+    ALTER DATABASE "${DATABASE_ODOO_NAME}" OWNER TO odoo; 
+    GRANT ALL PRIVILEGES ON DATABASE "${DATABASE_ODOO_NAME}" TO "${DATABASE_ODOO_USER}";
+    EOF
+    #no need to run cause i changed restore from odoo user
+    #ALTER DATABASE "${DATABASE_ODOO_NAME}" OWNER TO odoo; 
+    fi
+  initdb.odoo-admin.conf.sh: |
+    #!/bin/bash
+    . {{ .Values.volumes.dbpatchmetadata }}/.env
+    sleep 3s; #sleep for provisoning network up
+
+    echo '[SERVICE_INIT] Starting Init'
+    DATABASE_ODOO_NAME="{{ $realname }}"
+    DATABASE_ODOO_HOST="{{ .Values.odoo.database.host }}"
+    DATABASE_ODOO_USER="{{ $realname }}"
+    DATABASE_ODOO_PASS="{{ $realname }}.{{ .Values.odoo.saltpass }}"
+    ODOO_VERSION="{{ $odoo_version }}"
+    
+    #change permission /var/lib/odoo
+    #if [ ! -d /var/lib/odoo/addons ]
+    if [ -z "$(ls -A /var/lib/odoo)" ]; then
+      mkdir -p /var/lib/odoo/addons
+      echo '[SERVICE_INIT] Change Permission!'
+      chown -R odoo:odoo /var/lib/odoo
+    fi
+
+
+    if [ -z "$(ls -A /var/lib/odoobackup)" ]; then
+      echo "Empty odoobackup, Change Permission!"
+      chown -R odoo:odoo /var/lib/odoobackup
+    fi
+
+    if [ -z "$(ls -A /var/lib/extra-addons)" ]; then
+      echo "extra-addons, Change Permission!"
+      chown -R odoo:odoo /var/lib/extra-addons
+    fi
+
+    #db_name = ${DATABASE_ODOO_NAME}
+    #dbfilter = ^{{ $realname }}$
+    if [ ! -f /etc/odoo/odoo-admin.conf ]
+    then
+    echo "[SERVICE_INIT] Create Config Admin File!"
+    cat > /etc/odoo/odoo-admin.conf <<EOF
+    [options]
+    admin_passwd = ${DATABASE_ODOO_PASS}
+    db_host = ${DATABASE_ODOO_HOST}
+    db_user = ${DATABASE_ODOO_USER}
+    db_password = ${DATABASE_ODOO_PASS}
+    # db_user = ${POSTGRES_USER}
+    # db_password = ${POSTGRES_PASSWORD}
+    data_dir = /var/lib/odoo/
+    addons_path = /var/lib/extra-addons
+    workers = 2
+    proxy_mode = True
+    #dbfilter = ^${DATABASE_ODOO_NAME}$
+    #add more config
+    csv_internal_sep = ,
+    db_maxconn = 64
+    db_template = template0
+    email_from = False
+    #geoip_database = /usr/share/GeoIP/GeoLite2-City.mmdb
+    http_enable = True
+    http_interface = 
+    http_port = 8069
+    import_partial = 
+    limit_memory_hard = 2684354560
+    limit_memory_soft = 2147483648
+    limit_request = 8192
+    limit_time_cpu = 600
+    limit_time_real = 1200
+    limit_time_real_cron = -1
+    list_db = True
+    log_db = False
+    log_db_level = warning
+    log_handler = :INFO
+    log_level = info
+    logfile = /var/log/odoo/odoo-server.log
+    logrotate = False
+    longpolling_port = 8072
+    max_cron_threads = 2
+    osv_memory_age_limit = 1.0
+    osv_memory_count_limit = False
+    pg_path = None
+    pidfile = None
+    reportgz = False
+    server_wide_modules = base,web
+    smtp_password = False
+    smtp_port = 25
+    smtp_server = localhost
+    smtp_ssl = False
+    smtp_user = False
+    syslog = False
+    test_enable = False
+    test_file = False
+    test_tags = None
+    translate_modules = ['all']
+    unaccent = False
+    without_demo = False
+    EOF
+    fi
+    echo "[SERVICE_INIT] Change Permission /etc/odoo"
+    chown -R odoo:odoo /etc/odoo
+    echo "[SERVICE_INIT] Grant Again User!"
+    psql --host=${DATABASE_ODOO_HOST} --username=${POSTGRES_USER} <<EOF
+    CREATE USER "${DATABASE_ODOO_USER}" WITH ENCRYPTED PASSWORD '${DATABASE_ODOO_PASS}';
+    ALTER USER "${DATABASE_ODOO_USER}" CREATEDB;
+    ALTER USER "${DATABASE_ODOO_USER}" SUPERUSER;
+    EOF
+    #ALTER USER "${DATABASE_ODOO_USER}" CREATEDB;
+    #ALTER USER "${DATABASE_ODOO_USER}" SUPERUSER;
+    #SUPERUSER Need to restore
+
+    # if exists /etc/odoo/odoo.conf you need change it to backup because default odoo will get this file 
+    if [ -f /etc/odoo/odoo.conf ]
+    then
+      mv /etc/odoo/odoo.conf /etc/odoo/odoo-backup.conf
+    fi
+  initdb.odoo.run.sh: |
+    #!/bin/bash
+    #init database
+    #if [ ! -d /var/lib/odoo/.local ]
+    if [ ! -d /var/lib/odoo/filestore ]; then
+      echo "[SERVICE_INIT] Run Init Odoo!"
+      odoo -d {{ $realname }} -i base --stop-after-init --without-demo=all
+    fi
+  odoo.instance.run.sh: |
+    #!/bin/bash
+    #init database
+    echo "[SERVICE_RUNNING] Run Odoo!"
+    odoo -d {{ $realname }} --without-demo=all
+  backup.odoo.entrypoint.sh: |
+    #!/bin/bash
+    . {{ .Values.volumes.dbpatchmetadata }}/.env
+    . /etc/odoo/.admin-odoo-password
+    #sleep $((RANDOM % MAXWAIT))
+    sleep 30s
+    DIR_BACKUP=/var/lib/odoobackup
+    
+
+    DATABASE_ODOO_NAME="{{ $realname }}"
+    DATABASE_ODOO_HOST="{{ .Values.odoo.database.host }}"
+    DATABASE_ODOO_USER="{{ $realname }}"
+    DATABASE_ODOO_PASS="{{ $realname }}.{{ .Values.odoo.saltpass }}"
+    ODOO_VERSION="{{ $odoo_version }}"
+    while true; do
+      FILE_NAME_BACKUP=${DIR_BACKUP}/odoo-$(date +"%Y.%m.%d").zip
+      #check exists backup today if not exists backup create backup in today
+      if [ -d ${FILE_NAME_BACKUP} ]; then
+        #18000s == 5hours
+        sleep $(( (RANDOM % 18000)+ 1))
+        continue
+      fi
+
+      echo '[SERVICE_BACKUP] Starting Backup'
+
+      curl -X POST -F master_pwd=${ADMIN_ODOO_PASSWORD} -F name=${DATABASE_ODOO_NAME} -F backup_format=zip -o ${FILE_NAME_BACKUP} http://localhost:8069/web/database/backup
+
+      # pg_dump --host=${DATABASE_ODOO_HOST} --username=${DATABASE_ODOO_USER} -E UTF-8 -F p -b -C -f /var/lib/odoo/db.sql ${DATABASE_ODOO_NAME}
+      # cd /var/lib/odoo && tar -cvf ${FILE_NAME_BACKUP} *
+      # rm -f /var/lib/odoo/db.sql
+
+
+      echo '[SERVICE_BACKUP] Backup Done'
+      #delete all file backup over 10 days
+      find ${DIR_BACKUP} -type f -name '*.zip' -mtime +10 -exec rm {} \;
+      echo "[SERVICE_BACKUP] Created A Backup ${FILE_NAME_BACKUP}"
+      #after backup created sleep 23hours to next create backup
+
+
+
+      sleep 1h
+    done
+  backup.odoo.manual.sh: |
+    #!/bin/bash
+    . {{ .Values.volumes.dbpatchmetadata }}/.env
+    DIR_BACKUP=/var/lib/odoobackup
+    FILE_NAME_BACKUP=${DIR_BACKUP}/odoo-$(date +"%Y.%m.%d--%H.%M.%S").tar.gz
+
+    DATABASE_ODOO_NAME="{{ $realname }}"
+    DATABASE_ODOO_HOST="{{ .Values.odoo.database.host }}"
+    DATABASE_ODOO_USER="{{ $realname }}"
+    DATABASE_ODOO_PASS="{{ $realname }}.{{ .Values.odoo.saltpass }}"
+    ODOO_VERSION="{{ $odoo_version }}"
+
+    echo '[SERVICE_BACKUP] Starting Backup'
+    pg_dump --host=${DATABASE_ODOO_HOST} --username=${DATABASE_ODOO_USER} -E UTF-8 -F p -b -C -f /var/lib/odoo/db.sql ${DATABASE_ODOO_NAME}
+    cd /var/lib/odoo && tar -cvf ${FILE_NAME_BACKUP} *
+    rm -f /var/lib/odoo/db.sql
+    echo '[SERVICE_BACKUP] Backup Done'
+    #delete all file backup over 10 days
+    find ${DIR_BACKUP} -type f -name '*.tar.gz' -mtime +10 -exec rm {} \;
+    echo "[SERVICE_BACKUP] Created A Backup ${FILE_NAME_BACKUP}"
+  restore.odoo.run.sh: |
+    #!/bin/bash
+    . {{ .Values.volumes.dbpatchmetadata }}/.env
+    clear
+    DIR_BACKUP=/var/lib/odoobackup
+    DATABASE_ODOO_NAME="{{ $realname }}"
+    DATABASE_ODOO_HOST="{{ .Values.odoo.database.host }}"
+    DATABASE_ODOO_USER="{{ $realname }}"
+    DATABASE_ODOO_PASS="{{ $realname }}.{{ .Values.odoo.saltpass }}"
+    ODOO_VERSION="{{ $odoo_version }}"
+    declare -A list_backup
+
+
+    echo "============Backup Available==========="
+    i=0
+    for entry in ${DIR_BACKUP}/*.tar.gz
+    do
+      i=$((i+1))
+      echo "[${i}] - $entry"
+      list_backup[$i]="$entry"
+    done
+    read -p "Please Choose Number Backup That You Want To Restore:"  num_backup
+
+    if [ $num_backup -gt 0 -a $num_backup -le $i ]; then
+
+
+    read -p "Are You Sure Restore From ${list_backup[${num_backup}]} (Y/y):"  yesnoquestion
+
+    ###########################CONFIRM YES########################################
+    if [ "${yesnoquestion}" == "y" ] || [ "${yesnoquestion}" == "Y" ]; then
+
+    echo "Restore from file ${list_backup[${num_backup}]}"
+    #remove old data
+    rm -rf /var/lib/odoo/*
+
+    #extract backup
+    tar -C /var/lib/odoo/ -xvf "${list_backup[${num_backup}]}"
+
+    #import again to database
+    psql --host=${DATABASE_ODOO_HOST} --username=${POSTGRES_USER} <<EOF
+    GRANT ALL PRIVILEGES ON DATABASE "${DATABASE_ODOO_NAME}" TO "${POSTGRES_USER}";
+    DROP DATABASE "${DATABASE_ODOO_NAME}";
+    \i /var/lib/odoo/db.sql
+    GRANT ALL PRIVILEGES ON DATABASE "${DATABASE_ODOO_NAME}" TO "${DATABASE_ODOO_USER}";
+    EOF
+
+    #delete after restore
+    rm -f /var/lib/odoo/db.sql
+
+    #show Restore done
+    echo "Restore done!"
+    fi
+    ###########################CONFIRM YES########################################
+
+    else
+      echo "Wrong number backup!"
+    fi

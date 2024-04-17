@@ -1,0 +1,28 @@
+categories:
+- SAAS/ODOO
+questions:
+- variable: postgresql.version
+  default: "11.2"
+  description: "Choose Version"
+  type: enum
+  options:
+    - "9.6.12"
+    - "10.7"
+    - "11.2"
+  required: true
+  label: Version
+  group: "Choose postgresql Version"
+- variable: postgresql.username
+  default: "odoo"
+  description: "Config Username Postgres"
+  type: string
+  required: true
+  label: Username
+  group: "Configuration"
+- variable: postgresql.password
+  default: "Skg4NFN4UUlLdlR2enYwNU05RlJDbGNQcTJG"
+  description: "Config Password Postgres"
+  type: string
+  required: true
+  label: Password (base64)
+  group: "Configuration"

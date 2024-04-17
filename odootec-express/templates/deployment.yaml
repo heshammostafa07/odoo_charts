@@ -1,0 +1,189 @@
+{{ $odoo_type := split "-" .Values.odoo.version }}
+{{ $odoo_version := $odoo_type._0 }}
+{{ $odoo_template := $odoo_type._0 }}
+{{ $domain_prefix := split "-odoo" .Release.Name }}
+{{ $realname := $domain_prefix._0 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deploy-{{ $realname }}
+  labels:
+    app: odoo
+    name: {{ template "odoo.name" . }}
+spec:
+  selector:
+    matchLabels:
+      app: odoo
+      name: {{ template "odoo.name" . }}
+  {{- if .Values.odoo.outside.enable }}
+  replicas: 0
+  {{- else }}
+  replicas: 1
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app: odoo
+        name: {{ template "odoo.name" . }}
+    spec:
+      initContainers:
+      - name: initextraaddons
+        image: alpine/git:1.0.7
+        command:
+        - sh
+        - /etc/initsh-configmap/init.extra.addons.odoo.conf.sh
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /etc/initsh-configmap
+          name: initsh-configmap
+        - mountPath: /var/lib/extra-addons
+          name: var-lib-extraaddons
+        resources:
+          requests:
+            memory: "1Mi"
+            cpu: "1m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+      - name: initdb
+        image: {{ .Values.odoo.image_name }}:{{ $odoo_version }}
+        command:
+        - bash
+        - /etc/initsh-configmap/initdb.odoo.conf.sh
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /etc/initsh-configmap
+          name: initsh-configmap
+        - mountPath: /etc/odoo
+          name: etc-odoo
+        - mountPath: /var/lib/odoo
+          name: var-lib-odoo
+        - mountPath: /var/lib/odoobackup
+          name: var-lib-odoobackup
+        - mountPath: /var/lib/extra-addons
+          name: var-lib-extraaddons
+        - mountPath: /var/lib/default-addons
+          name: var-lib-defaultaddons
+        - mountPath: /var/lib/external-default-addons
+          name: var-lib-externaldefaultaddons
+        - mountPath: {{ .Values.volumes.dbpatchmetadata }}
+          name: dbmetadataenv
+        - mountPath: /var/lib/dbbackup
+          name: dbbackup
+        - mountPath: /var/lib/ent-addons
+          name: ent-modules
+        resources:
+          requests:
+            memory: "1Mi"
+            cpu: "1m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+      - name: initdb-run
+        image: {{ .Values.odoo.image_name }}:{{ $odoo_version }}
+        command:
+        - bash
+        - /etc/initsh-configmap/initdb.odoo.run.sh
+        volumeMounts:
+        - mountPath: /etc/initsh-configmap
+          name: initsh-configmap
+        - mountPath: /etc/odoo
+          name: etc-odoo
+        - mountPath: /var/lib/odoo
+          name: var-lib-odoo
+        - mountPath: /var/lib/extra-addons
+          name: var-lib-extraaddons
+        - mountPath: /var/lib/default-addons
+          name: var-lib-defaultaddons
+        - mountPath: {{ .Values.volumes.dbpatchmetadata }}
+          name: dbmetadataenv
+        - mountPath: /var/lib/dbbackup
+          name: dbbackup
+        - mountPath: /var/lib/ent-addons
+          name: ent-modules
+        resources:
+          requests:
+            memory: "1Mi"
+            cpu: "1m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+      containers:
+      - name: odoo-instance
+        image: {{ .Values.odoo.image_name }}:{{ $odoo_version }}
+        command:
+        - bash
+        - /etc/initsh-configmap/odoo.instance.run.sh
+        {{- if .Values.limit.enable }}
+        resources:
+          requests:
+            memory: "1Mi"
+            cpu: "1m"
+          limits:
+            memory: "{{ .Values.limit.memory }}Mi"
+            cpu: "{{ .Values.limit.cpu }}"
+        {{- end }}
+        ports:
+        - containerPort: 8069
+        - containerPort: 8072
+        volumeMounts:
+        - mountPath: /etc/odoo
+          name: etc-odoo
+        - mountPath: /var/lib/odoo
+          name: var-lib-odoo
+        - mountPath: /var/lib/odoobackup
+          name: var-lib-odoobackup
+        - mountPath: /etc/initsh-configmap
+          name: initsh-configmap
+        - mountPath: /var/lib/extra-addons
+          name: var-lib-extraaddons
+        - mountPath: /var/lib/default-addons
+          name: var-lib-defaultaddons
+        - mountPath: {{ .Values.volumes.dbpatchmetadata }}
+          name: dbmetadataenv
+        - mountPath: /var/lib/dbbackup
+          name: dbbackup
+        - mountPath: /var/lib/ent-addons
+          name: ent-modules
+      volumes:
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/etc-odoo
+          type: DirectoryOrCreate
+        name: etc-odoo
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/odoo
+          type: DirectoryOrCreate
+        name: var-lib-odoo
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/odoobackup
+          type: DirectoryOrCreate
+        name: var-lib-odoobackup
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/extra-addons
+          type: DirectoryOrCreate
+        name: var-lib-extraaddons
+      - hostPath:
+          path: {{ .Values.volumes.defaultaddons }}
+          type: DirectoryOrCreate
+        name: var-lib-externaldefaultaddons
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/default-addons
+          type: DirectoryOrCreate
+        name: var-lib-defaultaddons
+      - configMap:
+          name: configmap-{{ $realname }}
+        name: initsh-configmap
+      - hostPath:
+          path: {{ .Values.volumes.dbpatchmetadata }}
+          type: DirectoryOrCreate
+        name: dbmetadataenv
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/dbbackup
+          type: DirectoryOrCreate
+        name: dbbackup
+      - hostPath:
+          path: {{ .Values.volumes.hostpath }}/{{ $realname }}/ent-addons
+          type: DirectoryOrCreate
+        name: ent-modules

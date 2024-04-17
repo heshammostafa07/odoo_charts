@@ -1,0 +1,58 @@
+{{- $domain_name := split "---" .Values.domain.name }}
+{{- $domain_prefix := split "-odoo" .Release.Name }}
+{{ $realname := $domain_prefix._0 }}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-{{ $realname }}
+  labels:
+    app: odoo
+    name: {{ template "odoo.name" . }}
+  annotations:
+#    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "720"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "720"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "720"
+    nginx.ingress.kubernetes.io/proxy-body-size: "128m"
+#    nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: 720
+    {{- if .Values.letsencrypt.enable }}
+    {{- if ne $domain_name._1 "xip.io.wildcard" }}
+    certmanager.k8s.io/acme-challenge-type: http01
+    certmanager.k8s.io/cluster-issuer: "letsencrypt-prod"
+    {{- end }}
+    {{- end }}
+spec:
+  {{- if .Values.letsencrypt.enable }}
+  tls:
+  - hosts:
+    {{- if eq $domain_name._1 "xip.io" }} #if
+    - {{ $domain_prefix._0 }}.{{ $domain_name._0 }}
+    secretName: {{ template "odoo.name" . }}-tls
+    {{- else if eq $domain_name._1 "xip.io.wildcard" }} #elseif
+    - {{ $domain_prefix._0 }}.{{ $domain_name._0 }}
+    {{- else }} #else
+    - {{ .Values.domain.name }}
+    secretName: {{ template "odoo.name" . }}-tls
+    {{- end }} #end
+    
+  {{- end }}
+  rules:
+  {{- if eq $domain_name._1 "xip.io" }}
+  - host: "{{ $domain_prefix._0 }}.{{ $domain_name._0 }}"
+  {{- else if eq $domain_name._1 "xip.io.wildcard" }}
+  - host: "{{ $domain_prefix._0 }}.{{ $domain_name._0 }}"
+  {{- else }}
+  - host: "{{ .Values.domain.name }}"
+  {{- end }}
+    http:
+      paths:
+      - backend:
+          serviceName: service-{{ $realname }}
+          servicePort: 80
+        path: /
+      - backend:
+          serviceName: service-{{ $realname }}
+          servicePort: 8072
+        path: /longpolling

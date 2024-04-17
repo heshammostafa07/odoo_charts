@@ -1,0 +1,81 @@
+categories:
+- SAAS/ODOO
+questions:
+- variable: odoo.version
+  default: "12-default"
+  description: "Choose Version"
+  type: enum
+  options:
+    - "13-default"
+    - "12-default"
+    - "11-default"
+    - "10-default"
+    - "9-default"
+    - "8-default"
+  required: true
+  label: Version
+  group: "Configuration Odoo"
+- variable: odoo.outside.enable
+  default: "false"
+  description: "Are you want to restore from outside"
+  type: boolean
+  required: true
+  label: From Outside
+  group: "Configuration Odoo"
+- variable: odoo.addons.enable
+  default: "false"
+  description: "Add Extra Addons"
+  type: boolean
+  required: true
+  label: From GIT
+  group: "Configuration Odoo"
+  show_subquestion_if: true
+  subquestions:
+  - variable: odoo.addons.link
+    description: "Example: https://gitlab.com/USER/GitRepoFolder.git"
+    default: ""
+    type: string
+    label: Url Addons
+  - variable: odoo.addons.gitusername
+    description: "Username"
+    default: ""
+    type: string
+    label: Git User or Token Name
+  - variable: odoo.addons.gitpassword
+    description: "Password"
+    default: ""
+    type: password
+    label: Git Password or Token
+- variable: domain.name
+  default: ""
+  description: "Set Domain access to odoo if false, it's will auto generate a domain"
+  type: hostname
+  required: true
+  label: Specify a hostname
+  group: "Configuration Domain"
+- variable: letsencrypt.enable
+  default: "false"
+  description: "Are you want to Use Let's Encrypt"
+  type: boolean
+  required: true
+  label: Let's Encrypt
+  group: "Configuration Domain"
+- variable: limit.enable
+  default: "false"
+  description: "Limit Resource"
+  type: boolean
+  required: true
+  label: Limit Cpu and Memory
+  group: "Limit Resource"
+  show_subquestion_if: true
+  subquestions:
+  - variable: limit.memory
+    description: "Limit memory for container, example: 128, 256, 512 (M)"
+    default: "512"
+    type: string
+    label: Limit Memory
+  - variable: limit.cpu
+    description: "Limit cpu for container, example: 1, 2, 3.."
+    default: "1"
+    type: string
+    label: Limit Cpu

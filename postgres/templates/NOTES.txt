@@ -1,0 +1,2 @@
+Description postgres!
+Required `name service` and `namespace` must be `postgres`
